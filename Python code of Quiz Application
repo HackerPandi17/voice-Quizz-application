@@ -1,0 +1,111 @@
+import pymysql
+import tkinter as tk
+from tkinter import messagebox
+import pyttsx3
+
+class QuizApp:
+    def __init__(self):
+        # Database connection
+        self.connection = pymysql.connect(
+            host='localhost',
+            user='your_username',
+            password='your_password',
+            database='quiz_db'
+        )
+        self.cursor = self.connection.cursor()
+
+        # Initialize GUI
+        self.root = tk.Tk()
+        self.root.title("Quiz Application")
+
+        # Initialize Text-to-Speech engine
+        self.engine = pyttsx3.init()
+
+        # Set up user interface elements
+        self.create_widgets()
+
+        # Initialize variables
+        self.questions = []
+        self.current_question_index = 0
+        self.correct_answers = 0
+        self.answer_submitted = False
+
+    def create_widgets(self):
+        # Question label
+        self.question_label = tk.Label(self.root, text="", font=("Arial", 16))
+        self.question_label.pack(pady=20)
+
+        # Option buttons
+        self.option_vars = [tk.StringVar() for _ in range(4)]
+        self.option_buttons = [tk.Radiobutton(self.root, textvariable=var, font=("Arial", 12),
+                                              value=i, command=self.submit_answer)
+                               for i, var in enumerate(self.option_vars)]
+        for button in self.option_buttons:
+            button.pack(pady=5)
+
+        # Start button
+        self.start_button = tk.Button(self.root, text="Start Quiz", command=self.start_quiz)
+        self.start_button.pack(pady=20)
+
+    def start_quiz(self):
+        # Fetch all questions from the database
+        self.cursor.execute("SELECT question_id, question_text, option_a, option_b, option_c, option_d, correct_option FROM questions")
+        self.questions = self.cursor.fetchall()
+
+        if self.questions:
+            self.current_question_index = 0
+            self.correct_answers = 0
+            self.display_question()
+        else:
+            messagebox.showinfo("Quiz", "No questions available in the database.")
+
+    def display_question(self):
+        if self.current_question_index < len(self.questions):
+            question = self.questions[self.current_question_index]
+            question_id, question_text, option_a, option_b, option_c, option_d, correct_option = question
+
+            # Update UI with the fetched question and options
+            self.question_label.config(text=question_text)
+            self.option_vars[0].set(f"Option A: {option_a}")
+            self.option_vars[1].set(f"Option B: {option_b}")
+            self.option_vars[2].set(f"Option C: {option_c}")
+            self.option_vars[3].set(f"Option D: {option_d}")
+
+            self.current_correct_option = correct_option
+            self.answer_submitted = False
+        else:
+            self.show_results()
+
+    def submit_answer(self):
+        if not self.answer_submitted:
+            selected_option_index = int(self.root.focus_get().cget("value"))
+            selected_option_text = self.option_vars[selected_option_index].get().split(":")[1].strip()
+
+            if selected_option_text.lower() == self.current_correct_option.lower():
+                result_text = "Correct!"
+                self.correct_answers += 1
+            else:
+                result_text = f"Incorrect. The correct answer is {self.current_correct_option}."
+
+            self.engine.say(result_text)
+            self.engine.runAndWait()
+            self.answer_submitted = True
+            self.current_question_index += 1
+            self.display_question()
+
+    def show_results(self):
+        result_message = f"You answered {self.correct_answers} out of {len(self.questions)} questions correctly."
+        self.engine.say(result_message)
+        self.engine.runAndWait()
+        messagebox.showinfo("Quiz Results", result_message)
+
+    def run(self):
+        self.root.mainloop()
+
+    def __del__(self):
+        # Close database connection on destruction
+        self.connection.close()
+
+if __name__ == "__main__":
+    app = QuizApp()
+    app.run()
